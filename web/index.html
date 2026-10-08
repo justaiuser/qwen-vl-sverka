@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Сверка актов бухгалтерии | 1С ⟷ Скан / PDF (Qwen-VL)</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Шапка -->
+    <header class="header">
+      <div class="brand">
+        <div class="logo-icon">📊</div>
+        <div>
+          <h1>Сверка актов бухгалтерии</h1>
+          <p class="subtitle">Интеллектуальное сопоставление 1С (Excel) и сканов актов контрагента (PDF / Image) на базе Qwen-VL</p>
+        </div>
+      </div>
+      <div class="header-badges">
+        <span class="badge badge-ai" id="ai-status">⚡ Qwen3-VL (Ollama)</span>
+        <span class="badge badge-gpu" id="gpu-status">AMD Radeon RX 7600</span>
+      </div>
+    </header>
+
+    <!-- Секция загрузки -->
+    <section class="upload-section">
+      <div class="upload-grid">
+        <!-- Файл 1С -->
+        <div class="upload-card" id="card-1c">
+          <div class="card-icon">📗</div>
+          <h3>1. Акт сверки из 1С</h3>
+          <p>Выгрузка из 1С:Бухгалтерия в формате Excel (.xlsx, .xls)</p>
+          <div class="dropzone" id="dropzone-1c">
+            <input type="file" id="file-1c" accept=".xlsx,.xls" hidden>
+            <div class="drop-content">
+              <span class="upload-arrow">📁</span>
+              <p>Перетащите файл 1С сюда или <span class="browse-btn">выберите</span></p>
+              <div class="file-name" id="name-1c">Файл не выбран</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Акт Контрагента -->
+        <div class="upload-card" id="card-cp">
+          <div class="card-icon">📑</div>
+          <h3>2. Акт сверки контрагента</h3>
+          <p>Скан, фото или PDF-документ контрагента (.pdf, .png, .jpg)</p>
+          <div class="dropzone" id="dropzone-cp">
+            <input type="file" id="file-cp" accept=".pdf,.png,.jpg,.jpeg,.tiff" hidden>
+            <div class="drop-content">
+              <span class="upload-arrow">📷</span>
+              <p>Перетащите скан или PDF сюда или <span class="browse-btn">выберите</span></p>
+              <div class="file-name" id="name-cp">Файл не выбран</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Панель настроек и действий -->
+      <div class="action-bar">
+        <div class="settings-group">
+          <label class="setting-item">
+            <span>Модель Vision:</span>
+            <select id="model-select">
+              <option value="qwen3-vl:4b-instruct" selected>Qwen3-VL 4B (Быстро, оптимум)</option>
+              <option value="qwen3-vl:8b-instruct">Qwen3-VL 8B (Максимальная точность)</option>
+              <option value="qwen3-vl:2b-instruct">Qwen3-VL 2B (Легковесная)</option>
+            </select>
+          </label>
+
+          <label class="setting-item">
+            <span>Допуск дат:</span>
+            <select id="date-tolerance">
+              <option value="0">0 дней (день в день)</option>
+              <option value="3">± 3 дня</option>
+              <option value="5" selected>± 5 дней (стандарт)</option>
+              <option value="10">± 10 дней</option>
+              <option value="14">± 14 дней</option>
+            </select>
+          </label>
+
+          <label class="setting-item checkbox-label">
+            <input type="checkbox" id="force-ocr" checked>
+            <span>Принудительный OCR (Qwen-VL)</span>
+          </label>
+        </div>
+
+        <div class="buttons-group">
+          <button id="btn-demo" class="btn btn-secondary">✨ Загрузить демо-пример</button>
+          <button id="btn-reconcile" class="btn btn-primary">🚀 Начать сверку</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Индикатор загрузки / прогресса -->
+    <div class="loader-overlay" id="loader" style="display: none;">
+      <div class="loader-box">
+        <div class="spinner"></div>
+        <h4 id="loader-title">Идет обработка документов...</h4>
+        <p id="loader-desc">Распознавание скана моделью Qwen-VL на локальном GPU AMD Radeon...</p>
+      </div>
+    </div>
+
+    <!-- Результаты сверки -->
+    <section class="results-section" id="results" style="display: none;">
+      <!-- Главный вердикт -->
+      <div class="verdict-banner" id="verdict-banner">
+        <div class="verdict-icon" id="verdict-icon">⚠️</div>
+        <div class="verdict-text">
+          <h2 id="verdict-title">Обнаружены расхождения</h2>
+          <p id="verdict-details">Сверка выявила расхождения по операциям и конечному сальдо.</p>
+        </div>
+        <button id="btn-download-excel" class="btn btn-download">📥 Скачать отчет Excel (.xlsx)</button>
+      </div>
+
+      <!-- Метаданные сторон -->
+      <div class="parties-meta">
+        <div class="meta-item">
+          <span class="meta-label">Организация (1С):</span>
+          <span class="meta-val" id="meta-org">—</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Контрагент (по акту):</span>
+          <span class="meta-val" id="meta-cp">—</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Период сверки:</span>
+          <span class="meta-val" id="meta-period">—</span>
+        </div>
+      </div>
+
+      <!-- KPI Карточки сальдо и оборотов -->
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-title">Сальдо начальное</div>
+          <div class="kpi-val" id="kpi-init-1c">0.00 ₽</div>
+          <div class="kpi-sub">КП: <span id="kpi-init-cp">0.00 ₽</span></div>
+          <div class="kpi-diff" id="kpi-init-diff">Разница: 0.00 ₽</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-title">Обороты Дебет (1С) / Кредит (КП)</div>
+          <div class="kpi-val" id="kpi-dt-1c">0.00 ₽</div>
+          <div class="kpi-sub">КП (Кт): <span id="kpi-dt-cp">0.00 ₽</span></div>
+          <div class="kpi-diff" id="kpi-dt-diff">Разница: 0.00 ₽</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-title">Обороты Кредит (1С) / Дебет (КП)</div>
+          <div class="kpi-val" id="kpi-kt-1c">0.00 ₽</div>
+          <div class="kpi-sub">КП (Дт): <span id="kpi-kt-cp">0.00 ₽</span></div>
+          <div class="kpi-diff" id="kpi-kt-diff">Разница: 0.00 ₽</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-title">Сальдо конечное</div>
+          <div class="kpi-val" id="kpi-final-1c">0.00 ₽</div>
+          <div class="kpi-sub">КП: <span id="kpi-final-cp">0.00 ₽</span></div>
+          <div class="kpi-diff" id="kpi-final-diff">Разница: 0.00 ₽</div>
+        </div>
+      </div>
+
+      <!-- Таблица операций -->
+      <div class="table-container">
+        <div class="table-toolbar">
+          <div class="tab-filters">
+            <button class="tab-btn active" data-filter="all">Все записи (<span id="cnt-all">0</span>)</button>
+            <button class="tab-btn tab-diff" data-filter="diff">Расхождения (<span id="cnt-diff">0</span>)</button>
+            <button class="tab-btn tab-matched" data-filter="matched">Сверенные (<span id="cnt-matched">0</span>)</button>
+          </div>
+          <div class="table-search">
+            <input type="text" id="search-input" placeholder="Поиск по документу или сумме...">
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="reconcile-table" id="reconcile-table">
+            <thead>
+              <tr class="thead-group">
+                <th colspan="2" class="group-result">Результат</th>
+                <th colspan="4" class="group-1c">Данные 1С:Предприятие</th>
+                <th colspan="4" class="group-cp">Данные Контрагента (Скан)</th>
+                <th class="group-note">Пояснение</th>
+              </tr>
+              <tr class="thead-sub">
+                <th>Статус</th>
+                <th>Разница</th>
+                <th>Дата</th>
+                <th>Документ</th>
+                <th>Дебет</th>
+                <th>Кредит</th>
+                <th>Дата</th>
+                <th>Документ</th>
+                <th>Дебет</th>
+                <th>Кредит</th>
+                <th>Примечание</th>
+              </tr>
+            </thead>
+            <tbody id="table-body">
+              <!-- Заполняется динамически JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
